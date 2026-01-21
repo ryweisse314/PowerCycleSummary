@@ -3,8 +3,8 @@
    - Fetches each .txt note
    - Renders "Heading:" + "- bullets" format
    - Supports filename filter + global content search + in-note search
-   - NEW: Generator index (tab) that aggregates mentions across notes
-   - NEW: Detects "Power Cycle:" sections and lists dates per generator
+   - Generator index now created from section headings (except reserved headers)
+   - Detects "Power Cycle:" sections and lists dates per generator
 */
 
 const els = {
@@ -264,53 +264,39 @@ function buildGeneratorsAndPowerCycles() {
   generatorsIndex = {};
   powerCyclesMap = {};
 
-  const inlineRegex = /\bGenerator\s*([^\s,:-]*)/gi;
+  // Reserved headings we do NOT want to treat as generators:
+  const reserved = new Set(["power cycle", "to do", "todo", "notes", "action items"]);
 
   notes.forEach((n) => {
-    // 1) headings as generator names
+    // 1) Use every section heading as a generator name UNLESS it's reserved.
     n.blocks.forEach((b) => {
       if (!b.title) return;
-      if (/generator/i.test(b.title)) {
-        const genName = b.title.trim();
-        if (!generatorsIndex[genName]) generatorsIndex[genName] = [];
-        generatorsIndex[genName].push({
-          noteId: n.id,
-          filename: n.filename,
-          dateKey: n.dateKey,
-          sectionId: b.id,
-          snippet: snippetFromSection(b),
-        });
-      }
-    });
+      const titleTrim = b.title.trim();
+      const key = titleTrim.toLowerCase();
+      if (reserved.has(key)) return; // skip reserved headings
 
-    // 2) inline mentions
-    let m;
-    while ((m = inlineRegex.exec(n.text)) !== null) {
-      const token = m[0].trim();
-      const matchIndex = m.index;
-      const snippet = snippetAroundIndex(n.text, matchIndex, token.length);
-      const genName = token;
+      // Treat this heading as a generator entry
+      const genName = titleTrim;
       if (!generatorsIndex[genName]) generatorsIndex[genName] = [];
       generatorsIndex[genName].push({
         noteId: n.id,
         filename: n.filename,
         dateKey: n.dateKey,
-        sectionId: null,
-        snippet,
+        sectionId: b.id,
+        snippet: snippetFromSection(b),
       });
-    }
+    });
 
-    // 3) power cycle sections
+    // 2) power cycle sections: collect each bullet as a power-cycle item for that date
     n.blocks.forEach((b) => {
       if (!b.title) return;
       if (/^power\s*cycle$/i.test(b.title.trim())) {
-        // each bullet is an item that needs a power cycle on this date
         (b.items || []).forEach((itemRaw) => {
           const item = String(itemRaw || "").trim();
           if (!item) return;
           const key = normalizeNameKey(item);
           if (!powerCyclesMap[key]) powerCyclesMap[key] = [];
-          powerCyclesMap[key].push({ dateKey: n.dateKey, noteId: n.id, filename: n.filename });
+          powerCyclesMap[key].push({ dateKey: n.dateKey, noteId: n.id, filename: n.filename, raw: item });
         });
       }
     });
@@ -447,10 +433,19 @@ function showGeneratorMentions(genName) {
             .map((p) => {
               return `<div class="mention-item power-date" data-date="${escapeHtml(p.dateKey)}" data-noteid="${escapeHtml(p.noteId)}">
                 <div><strong>${escapeHtml(prettyDate(p.dateKey))}</strong> • <span class="meta">${escapeHtml(p.filename)}</span></div>
+                <div style="margin-top:6px;color:var(--muted);font-size:13px">Site: ${escapeHtml(p.raw || "")}</div>
               </div>`;
             })
             .join("")}
         </div>
+      </div>
+    `;
+  } else {
+    // optional UX: show "none" message
+    powerHtml = `
+      <div style="margin-top:12px">
+        <h3 style="margin:6px 0 8px 0">Power cycles</h3>
+        <div class="empty-state small" style="padding:10px;border-radius:8px">No power cycles recorded for this generator.</div>
       </div>
     `;
   }
