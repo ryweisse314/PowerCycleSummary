@@ -3,8 +3,8 @@
    - Fetches each .txt note
    - Renders "Heading:" + "- bullets" format
    - Supports filename filter + global content search + in-note search
-   - Generator index now created from section headings (except reserved headers)
-   - Detects "Power Cycle:" sections and lists dates per generator
+   - Generator index created from section headings (deduplicated by normalized key)
+   - Detects "Power Cycle:" sections and lists dates per generator (matched by normalized key)
 */
 
 const els = {
@@ -28,8 +28,14 @@ const els = {
 let notes = []; // { id, filename, dateKey, text, blocks }
 let notesByDateKey = {}; // dateKey -> noteId
 let activeNoteId = null;
-let generatorsIndex = {}; // { genName: [{ noteId, filename, dateKey, sectionId, snippet }] }
-let powerCyclesMap = {}; // normalizedSite -> [{ dateKey, noteId }]
+
+// Generators:
+// - keyed by normalized name: generatorsIndex[genKey] = [{...mentions}]
+let generatorsIndex = {};
+// map genKey -> canonical display name (first seen)
+let generatorsDisplay = {};
+// powerCyclesMap keyed by normalized site name (matching genKey ideally)
+let powerCyclesMap = {}; // key -> [{ dateKey, noteId, filename, raw }]
 
 // ---------- Utilities ----------
 function escapeHtml(str) {
@@ -46,7 +52,8 @@ function normalizeQuery(q) {
 }
 
 function normalizeNameKey(s) {
-  // Normalize text for matching: lowercase, remove non-alnum
+  // Normalize text for matching: lowercase, remove non-alnum.
+  // Keep inner digits/letters, strip punctuation/whitespace.
   return String(s || "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "");
@@ -262,23 +269,28 @@ function renderActiveNoteWithHighlight() {
 // ---------- Generators & Power Cycle indexing ----------
 function buildGeneratorsAndPowerCycles() {
   generatorsIndex = {};
+  generatorsDisplay = {};
   powerCyclesMap = {};
 
   // Reserved headings we do NOT want to treat as generators:
-  const reserved = new Set(["power cycle", "to do", "todo", "notes", "action items"]);
+  const reserved = new Set(["power cycle", "powercycle"]);
 
   notes.forEach((n) => {
     // 1) Use every section heading as a generator name UNLESS it's reserved.
     n.blocks.forEach((b) => {
       if (!b.title) return;
       const titleTrim = b.title.trim();
-      const key = titleTrim.toLowerCase();
-      if (reserved.has(key)) return; // skip reserved headings
+      const keyLower = titleTrim.toLowerCase();
+      if (reserved.has(keyLower)) return; // skip reserved headings
 
-      // Treat this heading as a generator entry
-      const genName = titleTrim;
-      if (!generatorsIndex[genName]) generatorsIndex[genName] = [];
-      generatorsIndex[genName].push({
+      // normalize key for deduplication
+      const genKey = normalizeNameKey(titleTrim);
+      if (!genKey) return;
+      // set canonical display name on first occurrence
+      if (!generatorsDisplay[genKey]) generatorsDisplay[genKey] = titleTrim;
+
+      if (!generatorsIndex[genKey]) generatorsIndex[genKey] = [];
+      generatorsIndex[genKey].push({
         noteId: n.id,
         filename: n.filename,
         dateKey: n.dateKey,
@@ -311,23 +323,8 @@ function buildGeneratorsAndPowerCycles() {
   });
 }
 
-function snippetFromSection(section) {
-  const all = [].concat(section.paragraphs || []).concat(section.items || []);
-  if (!all.length) return "";
-  const s = String(all[0]).slice(0, 140);
-  return s + (String(all[0]).length > 140 ? "…" : "");
-}
-
-function snippetAroundIndex(text, idx, len) {
-  const start = Math.max(0, idx - 40);
-  const end = Math.min(text.length, idx + len + 40);
-  const raw = text.slice(start, end).replace(/\s+/g, " ");
-  return raw.length > 140 ? raw.slice(0, 137) + "…" : raw;
-}
-
-// find matching power cycle entries for a generator name (with fallback)
-function findPowerCyclesForGenerator(genName) {
-  const genKey = normalizeNameKey(genName);
+// find matching power cycle entries for a generator key (with fallback)
+function findPowerCyclesForGeneratorKey(genKey) {
   const matches = [];
 
   // direct key
@@ -359,12 +356,30 @@ function findPowerCyclesForGenerator(genName) {
   return out;
 }
 
+function snippetFromSection(section) {
+  const all = [].concat(section.paragraphs || []).concat(section.items || []);
+  if (!all.length) return "";
+  const s = String(all[0]).slice(0, 140);
+  return s + (String(all[0]).length > 140 ? "…" : "");
+}
+
+function snippetAroundIndex(text, idx, len) {
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(text.length, idx + len + 40);
+  const raw = text.slice(start, end).replace(/\s+/g, " ");
+  return raw.length > 140 ? raw.slice(0, 137) + "…" : raw;
+}
+
 // ---------- Generators UI ----------
 function renderGeneratorsView() {
   buildGeneratorsAndPowerCycles();
 
-  const names = Object.keys(generatorsIndex).sort((a, b) => a.localeCompare(b));
-  if (names.length === 0) {
+  // produce a list of { key, display } sorted by display name
+  const items = Object.keys(generatorsIndex)
+    .map((k) => ({ key: k, display: generatorsDisplay[k] || k }))
+    .sort((a, b) => a.display.localeCompare(b.display));
+
+  if (items.length === 0) {
     els.generatorsEmpty.classList.remove("hidden");
     els.generatorList.innerHTML = "";
     els.generatorMentions.classList.add("hidden");
@@ -373,15 +388,15 @@ function renderGeneratorsView() {
   els.generatorsEmpty.classList.add("hidden");
   els.generatorMentions.classList.add("hidden");
 
-  els.generatorList.innerHTML = names
-    .map((name) => {
-      const count = generatorsIndex[name].length;
-      const powerCycles = findPowerCyclesForGenerator(name);
+  els.generatorList.innerHTML = items
+    .map(({ key, display }) => {
+      const count = generatorsIndex[key].length;
+      const powerCycles = findPowerCyclesForGeneratorKey(key);
       const pcCount = powerCycles.length;
       const pcBadge = pcCount ? `<span class="badge">⚡ ${pcCount}</span>` : "";
-      return `<div class="generator-card" data-gen="${escapeHtml(name)}">
+      return `<div class="generator-card" data-genkey="${escapeHtml(key)}">
         <div>
-          <div class="gen-name">${escapeHtml(name)}</div>
+          <div class="gen-name">${escapeHtml(display)}</div>
           <div class="meta" style="margin-top:6px;color:var(--muted);font-size:12px">${count} mention${count===1?"":"s"} ${pcBadge ? '• ' + pcBadge : ''}</div>
         </div>
         <div class="badge">${count} mention${count===1?"":"s"}</div>
@@ -392,22 +407,23 @@ function renderGeneratorsView() {
   // wire clicks
   els.generatorList.querySelectorAll(".generator-card").forEach((el) => {
     el.addEventListener("click", () => {
-      const name = el.getAttribute("data-gen");
-      showGeneratorMentions(name);
+      const key = el.getAttribute("data-genkey");
+      showGeneratorMentionsByKey(key);
     });
   });
 }
 
-function showGeneratorMentions(genName) {
-  const mentions = generatorsIndex[genName] || [];
-  const powerCycles = findPowerCyclesForGenerator(genName);
+function showGeneratorMentionsByKey(genKey) {
+  const mentions = generatorsIndex[genKey] || [];
+  const powerCycles = findPowerCyclesForGeneratorKey(genKey);
+  const display = generatorsDisplay[genKey] || genKey;
 
   if (!mentions.length && !powerCycles.length) return;
 
   let mentionsHtml = "";
   if (mentions.length) {
     mentionsHtml = `
-      <h2 style="margin-top:0">${escapeHtml(genName)}</h2>
+      <h2 style="margin-top:0">${escapeHtml(display)}</h2>
       ${mentions
         .map((m) => {
           const when = prettyDate(m.dateKey);
@@ -441,7 +457,6 @@ function showGeneratorMentions(genName) {
       </div>
     `;
   } else {
-    // optional UX: show "none" message
     powerHtml = `
       <div style="margin-top:12px">
         <h3 style="margin:6px 0 8px 0">Power cycles</h3>
