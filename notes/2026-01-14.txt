@@ -1,19 +1,17 @@
-sites:
-active coms, no run signal: 
-- CJ MUshroom- turned their system back on after a year (around may)
-	- run events- there is a single run event for the stack testing
-	- probably missing the beginning of that run, since temps start off high
-	- eric may have edited the run by swapping sd cards, corrupt sd card
-	-key point: there are several unaccounted for runs, the run signal is broken. Must check historical for every site. 
-	-if a thermocouple or pressure is giving a max or min values, it is an equipment issue. must be reported immediately.
--Fannie Mae
--IWCO- same issue as cj mushroom
-	- idea is to check the historical on a weekly basis to ensure that runs are not missed.
+CJ Mushroom:
+- There is a single run event for the stack testing.
+- Probably missing the beginning of that run since temps start off high.
+- Eric may have edited the run by swapping SD cards, and he used a corrupt SD card.
+- There are several missing runs because the run signal was not present. The historical shows the runs.
+- If a thermocouple or pressure is giving a max or min value, it is an equipment issue and should be reported.
 
-What are the characteristics of a failed DAC:
-- constant run signal on or off
-- measures temp, relay, and pressure
-- constant temperature or pressure could also indicate this
-- Eric doesn't believe it is a DAC issue for the IWCO site
+Fannie Mae:
+- Comms are still out.
 
-hrst atlatnic, iad2a beachwood
+IWCO:
+- Missing run events based on the historical graphs.
+- Possibly caused by a failed DAC.
+
+Power Cycle:
+- HRST Atlantic
+- IAD2A Beachwood

@@ -7,6 +7,7 @@
   --border: #242738;
   --accent: #6aa5ff;
   --mark: #ffd54a;
+  --highlight: rgba(106,165,255,0.12);
 }
 
 * { box-sizing: border-box; }
@@ -143,7 +144,7 @@ code { color: var(--text); background: #1b1e2c; padding: 0.1rem 0.3rem; border-r
   border-bottom: 1px solid var(--border);
   display: grid;
   gap: 14px;
-  grid-template-columns: 1fr 360px;
+  grid-template-columns: 1fr 420px;
   align-items: start;
 }
 
@@ -158,6 +159,28 @@ code { color: var(--text); background: #1b1e2c; padding: 0.1rem 0.3rem; border-r
   margin-top: 4px;
   color: var(--muted);
   font-size: 12px;
+}
+
+.right-controls { display:flex; gap:14px; align-items:center; }
+
+.tabs {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.tab {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 8px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-color: rgba(106,165,255,0.9);
+  background: rgba(106,165,255,0.05);
 }
 
 .search-in-note {
@@ -216,6 +239,57 @@ mark {
   padding: 0 2px;
   border-radius: 4px;
 }
+
+/* Generator list styles */
+.generator-list {
+  display: grid;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 4px;
+}
+
+.generator-card {
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  border-radius: 10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  background: #0f1117;
+  cursor: pointer;
+}
+
+.generator-card .gen-name {
+  font-weight:700;
+}
+
+.generator-mentions {
+  margin-top: 12px;
+}
+
+.mention-item {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  margin-bottom: 8px;
+  background: rgba(255,255,255,0.02);
+  cursor: pointer;
+}
+
+.mention-item .meta {
+  color: var(--muted);
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+/* highlight a targeted section */
+.section.highlight {
+  box-shadow: 0 0 0 3px rgba(106,165,255,0.12) inset;
+  background: linear-gradient(90deg, rgba(106,165,255,0.04), rgba(255,255,255,0.01));
+}
+
+/* helper hidden class */
+.hidden { display: none; }
 
 @media (max-width: 980px) {
   .app { grid-template-columns: 1fr; }

@@ -52,20 +52,28 @@
             <div id="noteSubtitle" class="note-subtitle"></div>
           </div>
 
-          <div class="search-in-note">
-            <label class="label" for="inNoteSearch">Search in this note</label>
-            <input
-              id="inNoteSearch"
-              class="input"
-              type="text"
-              placeholder="Find…"
-              autocomplete="off"
-              disabled
-            />
-            <div id="inNoteMeta" class="meta"></div>
+          <div class="right-controls">
+            <div id="viewTabs" class="tabs" role="tablist" aria-label="Views">
+              <button id="tabNotes" class="tab active" role="tab">Notes</button>
+              <button id="tabGenerators" class="tab" role="tab">Generators</button>
+            </div>
+
+            <div class="search-in-note">
+              <label class="label" for="inNoteSearch">Search in this note</label>
+              <input
+                id="inNoteSearch"
+                class="input"
+                type="text"
+                placeholder="Find…"
+                autocomplete="off"
+                disabled
+              />
+              <div id="inNoteMeta" class="meta"></div>
+            </div>
           </div>
         </header>
 
+        <!-- NOTES VIEW -->
         <section id="noteContent" class="note-content">
           <div class="empty-state">
             <p>Pick a note from the left.</p>
@@ -73,6 +81,18 @@
               Notes are loaded from <code>/notes/notes.json</code>.
             </p>
           </div>
+        </section>
+
+        <!-- GENERATORS VIEW (hidden by default) -->
+        <section id="generatorsView" class="note-content hidden">
+          <div class="empty-state" id="generatorsEmpty">
+            <p>No generators detected in notes yet.</p>
+            <p class="small">Generator entries are created when a section heading or inline mention contains "Generator".</p>
+          </div>
+
+          <div id="generatorList" class="generator-list"></div>
+
+          <div id="generatorMentions" class="generator-mentions hidden"></div>
         </section>
       </main>
     </div>

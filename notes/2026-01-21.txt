@@ -3,18 +3,20 @@ ORD1- Gens 7 & 10:
 - Possibly causing complications with 4HRAT readings of previous runs
 - On 9/11 4hr temp goes to 0 for gen10
 
-IAD1-B: Gens IAD1- A & B:
+IAD1-B- Gens IAD1- A & B:
 - Between 7/10 and 11/17, there isn't a data gap, but the card had no readings in the card.  
 - Issue with the PLC, not the MOXA. If we have 16 consecutive data points with no variation, triggers an alarm.
 
-Fannie Mae- GEN 1:
-- Problems persisting with comms.
+Fannie Mae:
+- Problems persisting with comms on GEN 1.
 - Had a number of long run events in December, and there are gaps in some of the later run events.
 - Bish is going to reset the time on the PLC.
 - Only intervals should be in 1 hour or 1 minute.
 - This is sending out data around every 21 minutes and 5 seconds.
 - There are a few instances of 1 minute gaps.
 
-IAD2-A- Gen 1:
+IAD2-A:
 - IP: 10:123:123:113.
 - Go back and pull the historical data.
+
+Power Cycle:
