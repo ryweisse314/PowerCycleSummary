@@ -1,6 +1,8 @@
-/* app.js
+/* app.js (updated)
    - Generator entries created ONLY from section headings (except Power Cycle)
    - Power Cycle bullets are mapped to generator keys by normalization
+   - Global search now shows a highlighted snippet per file and
+     opening a file auto-highlights the global search query in the note view
    - No inline "Generator" scanning
 */
 
@@ -75,6 +77,31 @@ function renderBlocksToHtml(blocks){
   }).join("");
 }
 
+// ---------- New: snippet extraction with highlight for global search ----------
+function snippetWithHighlight(noteText, query){
+  const q = normalizeQuery(query);
+  if(!q) return "";
+  const lower = String(noteText||"").toLowerCase();
+  const idx = lower.indexOf(q);
+  if(idx === -1) return "";
+  const start = Math.max(0, idx - 40);
+  const end = Math.min(lower.length, idx + q.length + 40);
+  // extract original substring (preserve real casing) and escape, then replace matched part with <mark>
+  const raw = String(noteText || "").slice(start, end).replace(/\s+/g, " ");
+  const esc = escapeHtml(raw);
+  // find where the lowercase match occurs inside the escaped substring
+  const before = escapeHtml(String(noteText || "").slice(start, idx));
+  const match = escapeHtml(String(noteText || "").slice(idx, idx + q.length));
+  const after = escapeHtml(String(noteText || "").slice(idx + q.length, end));
+  // If for some reason slicing/escaping misaligns, fall back to simple replace on esc
+  try {
+    return `${before}<mark>${match}</mark>${after}${ end < String(noteText||"").length ? "&hellip;" : "" }`;
+  } catch (e) {
+    // graceful fallback
+    return esc.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "i"), m => `<mark>${escapeHtml(m)}</mark>`);
+  }
+}
+
 // ---------- UI: file list & note rendering ----------
 function renderFileList(){
   const filter = normalizeQuery(els.filenameFilter.value);
@@ -88,6 +115,8 @@ function renderFileList(){
     const active = n.id===activeNoteId ? "active" : "";
     const subtitle = prettyDate(n.dateKey);
     const hitsBadge = globalQ ? `<span class="badge">🔎 <span>${n.hits} hit${n.hits===1?"":"s"}</span></span>` : "";
+    // snippet for global search (highlighted)
+    const snippetHtml = globalQ ? `<div class="file-snippet small" style="margin-top:8px;color:var(--muted)">${snippetWithHighlight(n.text, globalQ)}</div>` : "";
     return `<div class="file-item ${active}" role="listitem" data-id="${n.id}">
       <div class="file-name">${escapeHtml(n.dateKey)}</div>
       <div class="file-sub">
@@ -95,6 +124,7 @@ function renderFileList(){
         <span class="badge">🗓️ <span>${escapeHtml(subtitle)}</span></span>
         ${hitsBadge}
       </div>
+      ${snippetHtml}
     </div>`;
   }).join("");
 
@@ -112,17 +142,30 @@ function setActiveNote(id, targetSectionId=null){
   els.noteTitle.textContent = note.dateKey;
   els.noteSubtitle.textContent = `${note.filename} • ${prettyDate(note.dateKey)}`;
   els.inNoteSearch.disabled = false; els.inNoteSearch.value=""; els.inNoteMeta.textContent="";
-  els.noteContent.innerHTML = renderBlocksToHtml(note.blocks);
+  // if a global query exists, highlight the note for that query; otherwise render normally
+  const globalQ = normalizeQuery(els.globalSearch.value);
+  if(globalQ){
+    renderActiveNoteWithHighlight(globalQ);
+  } else {
+    els.noteContent.innerHTML = renderBlocksToHtml(note.blocks);
+  }
   if(targetSectionId) setTimeout(()=> jumpToSection(targetSectionId), 50);
   renderFileList();
 }
-function renderActiveNoteWithHighlight(){
-  const note = notes.find(n=> n.id===activeNoteId); if(!note) return;
-  const q = normalizeQuery(els.inNoteSearch.value);
-  const base = renderBlocksToHtml(note.blocks);
-  els.noteContent.innerHTML = highlightHtml(base, q);
-  const hits = q ? countOccurrences(note.text.toLowerCase(), q) : 0;
-  els.inNoteMeta.textContent = q ? `${hits} hit${hits===1?"":"s"}` : "";
+function renderActiveNoteWithHighlight(query){
+  const note = notes.find(n=> n.id===activeNoteId);
+  if(!note) return;
+  // base HTML
+  const baseHtml = renderBlocksToHtml(note.blocks);
+  // highlight both the global query and (if present) the in-note search independently:
+  // priority: if in-note search has text, use that; otherwise use passed query.
+  const inNoteQ = normalizeQuery(els.inNoteSearch.value);
+  const qToUse = inNoteQ || normalizeQuery(query || "");
+  const highlighted = highlightHtml(baseHtml, qToUse);
+  els.noteContent.innerHTML = highlighted;
+  // update meta using the query used
+  const hits = qToUse ? countOccurrences(note.text.toLowerCase(), qToUse) : 0;
+  els.inNoteMeta.textContent = qToUse ? `${hits} hit${hits===1?"":"s"}` : "";
 }
 
 // ---------- Build generator index (HEADINGS only) & power cycles ----------
@@ -143,8 +186,6 @@ function buildGeneratorsAndPowerCycles(){
         noteId: n.id, filename: n.filename, dateKey: n.dateKey, sectionId: b.id, snippet: snippetFromSection(b)
       });
     });
-
-    // power cycle sections:
     n.blocks.forEach(b=>{
       if(!b.title) return;
       if(/^power\s*cycle$/i.test(b.title.trim())){
@@ -158,7 +199,6 @@ function buildGeneratorsAndPowerCycles(){
       }
     });
   });
-
   Object.keys(generatorsIndex).forEach(k => generatorsIndex[k].sort((a,b)=> b.dateKey.localeCompare(a.dateKey)));
   Object.keys(powerCyclesMap).forEach(k => powerCyclesMap[k].sort((a,b)=> b.dateKey.localeCompare(a.dateKey)));
 }
@@ -226,12 +266,8 @@ function showGeneratorMentionsByKey(genKey){
     powerHtml = `<div style="margin-top:12px"><h3 style="margin:6px 0 8px 0">Power cycles</h3><div class="empty-state small" style="padding:10px;border-radius:8px">No power cycles recorded for this generator.</div></div>`;
   }
   els.generatorMentions.innerHTML = `${mentionsHtml}${powerHtml}`; els.generatorMentions.classList.remove("hidden");
-  els.generatorMentions.querySelectorAll(".mention-item").forEach(el=>{
-    el.addEventListener("click", ()=>{ const noteId = el.getAttribute("data-noteid"); const section = el.getAttribute("data-section") || null; showView("notes"); setActiveNote(noteId, section); });
-  });
-  els.generatorMentions.querySelectorAll(".power-date").forEach(el=>{
-    el.addEventListener("click", ()=>{ const noteId = el.getAttribute("data-noteid"); showView("notes"); setActiveNote(noteId); });
-  });
+  els.generatorMentions.querySelectorAll(".mention-item").forEach(el=>{ el.addEventListener("click", ()=>{ const noteId = el.getAttribute("data-noteid"); const section = el.getAttribute("data-section") || null; showView("notes"); setActiveNote(noteId, section); }); });
+  els.generatorMentions.querySelectorAll(".power-date").forEach(el=>{ el.addEventListener("click", ()=>{ const noteId = el.getAttribute("data-noteid"); showView("notes"); setActiveNote(noteId); }); });
 }
 
 // ---------- Jump & Events ----------
@@ -240,9 +276,19 @@ function jumpToSection(sectionId){ if(!sectionId) return; const el = document.ge
 function wireEvents(){
   els.filenameFilter.addEventListener("input", ()=> renderFileList());
   els.globalSearch.addEventListener("input", ()=> renderFileList());
-  els.inNoteSearch.addEventListener("input", ()=> renderActiveNoteWithHighlight());
+  els.inNoteSearch.addEventListener("input", ()=> {
+    // if user types into in-note search, update highlight on the currently-open note
+    const inQ = normalizeQuery(els.inNoteSearch.value);
+    if(inQ) renderActiveNoteWithHighlight(inQ);
+    else { // if cleared, but a global search exists, use global highlight; else render base
+      const g = normalizeQuery(els.globalSearch.value);
+      if(g) renderActiveNoteWithHighlight(g); else { const note = notes.find(n=>n.id===activeNoteId); if(note) els.noteContent.innerHTML = renderBlocksToHtml(note.blocks); }
+    }
+  });
+
   els.tabNotes.addEventListener("click", ()=> showView("notes"));
   els.tabGenerators.addEventListener("click", ()=> { buildGeneratorsAndPowerCycles(); renderGeneratorsView(); showView("generators"); });
+
   document.addEventListener("keydown",(e)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); els.globalSearch.focus(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){ if(!els.inNoteSearch.disabled){ e.preventDefault(); els.inNoteSearch.focus(); } } });
 }
 
