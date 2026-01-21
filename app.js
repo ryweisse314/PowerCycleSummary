@@ -1,9 +1,8 @@
-/* app.js (updated)
-   - Generator entries created ONLY from section headings (except Power Cycle)
-   - Power Cycle bullets are mapped to generator keys by normalization
-   - Global search now shows a highlighted snippet per file and
-     opening a file auto-highlights the global search query in the note view
-   - No inline "Generator" scanning
+/* app.js
+   - Same feature set as before (headings → generators, power cycles, global search snippets)
+   - NEW: when a global or in-note search is active, any section whose content contains the query
+          will be given the "highlight" class (visual full-section highlight), AND matching text
+          inside that section is wrapped in <mark> as before.
 */
 
 const els = {
@@ -86,19 +85,15 @@ function snippetWithHighlight(noteText, query){
   if(idx === -1) return "";
   const start = Math.max(0, idx - 40);
   const end = Math.min(lower.length, idx + q.length + 40);
-  // extract original substring (preserve real casing) and escape, then replace matched part with <mark>
   const raw = String(noteText || "").slice(start, end).replace(/\s+/g, " ");
-  const esc = escapeHtml(raw);
-  // find where the lowercase match occurs inside the escaped substring
+  // Build highlighted snippet safely using escaping and slicing
   const before = escapeHtml(String(noteText || "").slice(start, idx));
   const match = escapeHtml(String(noteText || "").slice(idx, idx + q.length));
   const after = escapeHtml(String(noteText || "").slice(idx + q.length, end));
-  // If for some reason slicing/escaping misaligns, fall back to simple replace on esc
   try {
     return `${before}<mark>${match}</mark>${after}${ end < String(noteText||"").length ? "&hellip;" : "" }`;
   } catch (e) {
-    // graceful fallback
-    return esc.replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "i"), m => `<mark>${escapeHtml(m)}</mark>`);
+    return escapeHtml(raw).replace(new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"), "i"), m => `<mark>${escapeHtml(m)}</mark>`);
   }
 }
 
@@ -115,7 +110,6 @@ function renderFileList(){
     const active = n.id===activeNoteId ? "active" : "";
     const subtitle = prettyDate(n.dateKey);
     const hitsBadge = globalQ ? `<span class="badge">🔎 <span>${n.hits} hit${n.hits===1?"":"s"}</span></span>` : "";
-    // snippet for global search (highlighted)
     const snippetHtml = globalQ ? `<div class="file-snippet small" style="margin-top:8px;color:var(--muted)">${snippetWithHighlight(n.text, globalQ)}</div>` : "";
     return `<div class="file-item ${active}" role="listitem" data-id="${n.id}">
       <div class="file-name">${escapeHtml(n.dateKey)}</div>
@@ -142,30 +136,51 @@ function setActiveNote(id, targetSectionId=null){
   els.noteTitle.textContent = note.dateKey;
   els.noteSubtitle.textContent = `${note.filename} • ${prettyDate(note.dateKey)}`;
   els.inNoteSearch.disabled = false; els.inNoteSearch.value=""; els.inNoteMeta.textContent="";
-  // if a global query exists, highlight the note for that query; otherwise render normally
+  // choose highlight behavior:
+  const inNoteQ = normalizeQuery(els.inNoteSearch.value);
   const globalQ = normalizeQuery(els.globalSearch.value);
-  if(globalQ){
-    renderActiveNoteWithHighlight(globalQ);
+  const qToUse = inNoteQ || globalQ || "";
+  if(qToUse){
+    renderActiveNoteWithHighlight(qToUse);
   } else {
     els.noteContent.innerHTML = renderBlocksToHtml(note.blocks);
+    // clear any previously applied section highlights (in case)
+    document.querySelectorAll(".section.highlight").forEach(s=>s.classList.remove("highlight"));
   }
   if(targetSectionId) setTimeout(()=> jumpToSection(targetSectionId), 50);
   renderFileList();
 }
+
+// Modified: when highlighting note, add .highlight to entire sections that contain the query
 function renderActiveNoteWithHighlight(query){
   const note = notes.find(n=> n.id===activeNoteId);
   if(!note) return;
-  // base HTML
+  const q = normalizeQuery(query || "");
   const baseHtml = renderBlocksToHtml(note.blocks);
-  // highlight both the global query and (if present) the in-note search independently:
-  // priority: if in-note search has text, use that; otherwise use passed query.
-  const inNoteQ = normalizeQuery(els.inNoteSearch.value);
-  const qToUse = inNoteQ || normalizeQuery(query || "");
-  const highlighted = highlightHtml(baseHtml, qToUse);
-  els.noteContent.innerHTML = highlighted;
+  // wrap matched words with <mark>
+  const highlightedHtml = q ? highlightHtml(baseHtml, q) : baseHtml;
+  els.noteContent.innerHTML = highlightedHtml;
+
+  // remove any section highlight classes first
+  document.querySelectorAll(".section.highlight").forEach(s=> s.classList.remove("highlight"));
+
+  if(q){
+    // For each block in the parsed note, check if its combined text contains the query.
+    note.blocks.forEach((b) => {
+      // combine paragraphs and items into a single string for matching
+      const combined = (b.paragraphs || []).concat(b.items || []).join(" ").toLowerCase();
+      if(!combined) return;
+      if(combined.includes(q)){
+        // add highlight to the corresponding DOM element by id
+        const el = document.getElementById(b.id);
+        if(el) el.classList.add("highlight");
+      }
+    });
+  }
+
   // update meta using the query used
-  const hits = qToUse ? countOccurrences(note.text.toLowerCase(), qToUse) : 0;
-  els.inNoteMeta.textContent = qToUse ? `${hits} hit${hits===1?"":"s"}` : "";
+  const hits = q ? countOccurrences(note.text.toLowerCase(), q) : 0;
+  els.inNoteMeta.textContent = q ? `${hits} hit${hits===1?"":"s"}` : "";
 }
 
 // ---------- Build generator index (HEADINGS only) & power cycles ----------
@@ -277,18 +292,15 @@ function wireEvents(){
   els.filenameFilter.addEventListener("input", ()=> renderFileList());
   els.globalSearch.addEventListener("input", ()=> renderFileList());
   els.inNoteSearch.addEventListener("input", ()=> {
-    // if user types into in-note search, update highlight on the currently-open note
     const inQ = normalizeQuery(els.inNoteSearch.value);
     if(inQ) renderActiveNoteWithHighlight(inQ);
-    else { // if cleared, but a global search exists, use global highlight; else render base
+    else {
       const g = normalizeQuery(els.globalSearch.value);
-      if(g) renderActiveNoteWithHighlight(g); else { const note = notes.find(n=>n.id===activeNoteId); if(note) els.noteContent.innerHTML = renderBlocksToHtml(note.blocks); }
+      if(g) renderActiveNoteWithHighlight(g); else { const note = notes.find(n=>n.id===activeNoteId); if(note) { els.noteContent.innerHTML = renderBlocksToHtml(note.blocks); document.querySelectorAll(".section.highlight").forEach(s=>s.classList.remove("highlight")); } }
     }
   });
-
   els.tabNotes.addEventListener("click", ()=> showView("notes"));
   els.tabGenerators.addEventListener("click", ()=> { buildGeneratorsAndPowerCycles(); renderGeneratorsView(); showView("generators"); });
-
   document.addEventListener("keydown",(e)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); els.globalSearch.focus(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){ if(!els.inNoteSearch.disabled){ e.preventDefault(); els.inNoteSearch.focus(); } } });
 }
 
