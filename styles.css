@@ -8,6 +8,10 @@
   --accent: #6aa5ff;
   --mark: #ffd54a;
   --highlight: rgba(106,165,255,0.12);
+  --success: #6fdc8c;
+  --success-bg: rgba(111,220,140,0.12);
+  --success-bg-hover: rgba(111,220,140,0.18);
+
 }
 
 * { box-sizing: border-box; }
@@ -281,6 +285,57 @@ mark {
   font-size: 12px;
   margin-top: 6px;
 }
+
+/* Primary action button (New Log) */
+.btn {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(111,220,140,0.45);
+  background: linear-gradient(
+    180deg,
+    rgba(111,220,140,0.22),
+    rgba(111,220,140,0.12)
+  );
+  color: #dff7e6;
+  font-size: 14px;
+  font-weight: 650;
+  cursor: pointer;
+  margin: 6px 0 14px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease,
+    transform 0.05s ease,
+    border-color 0.15s ease;
+}
+
+.btn:hover {
+  background: linear-gradient(
+    180deg,
+    rgba(111,220,140,0.3),
+    rgba(111,220,140,0.18)
+  );
+  border-color: rgba(111,220,140,0.7);
+  box-shadow:
+    0 0 0 3px rgba(111,220,140,0.18),
+    0 4px 14px rgba(0,0,0,0.35);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:focus-visible {
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(111,220,140,0.35),
+    0 4px 14px rgba(0,0,0,0.35);
+}
+
 
 /* highlight a targeted section */
 .section.highlight {
