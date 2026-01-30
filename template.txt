@@ -1,0 +1,13 @@
+site 1:
+- notes
+- notes
+
+site 2:
+- notes
+- notes
+
+site 3:
+- notes
+- notes
+
+Power Cycle:

@@ -21,6 +21,7 @@ const els = {
   generatorsEmpty: document.getElementById("generatorsEmpty"),
   tabNotes: document.getElementById("tabNotes"),
   tabGenerators: document.getElementById("tabGenerators"),
+  newLogBtn: document.getElementById("newLogBtn"),
 };
 
 let notes = []; // { id, filename, dateKey, text, blocks }
@@ -46,6 +47,56 @@ function prettyDate(k){ const m=k.match(/^(\d{4})-(\d{2})-(\d{2})$/); if(!m) ret
 function slugFor(s){ return String(s||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80); }
 function highlightHtml(html,q){ const qq=normalizeQuery(q); if(!qq) return html; const parts=html.split(/(<[^>]+>)/g); const re=new RegExp(qq.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"); return parts.map(p=>p.startsWith("<")?p:p.replace(re,m=>`<mark>${m}</mark>`)).join(""); }
 function countOccurrences(text,q){ const qq=normalizeQuery(q); if(!qq) return 0; const re=new RegExp(qq.replace(/[.*+?^${}()|[\]\\]/g,"\\$&"),"gi"); const m=String(text||"").match(re); return m?m.length:0; }
+
+function localISODateString(d = new Date()) {
+  // YYYY-MM-DD in the user's local timezone
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function triggerTextDownload(filename, text) {
+  const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  URL.revokeObjectURL(url);
+}
+
+async function downloadNewLogFromTemplate() {
+  // default filename is today's date
+  const defaultName = `${localISODateString()}.txt`;
+
+  // If today's log already exists in your loaded list, suggest a unique name
+  let suggested = defaultName;
+  if (notesByDateKey[localISODateString()]) {
+    suggested = `${localISODateString()}-new.txt`;
+  }
+
+  const filename = prompt("New log filename:", suggested);
+  if (!filename) return;
+
+  // Ensure .txt extension
+  const finalName = filename.toLowerCase().endsWith(".txt") ? filename : `${filename}.txt`;
+
+  // Fetch template.txt (place it next to index.html, or adjust the path)
+  const res = await fetch("./template.txt", { cache: "no-store" });
+  if (!res.ok) {
+    alert(`Could not load template.txt (${res.status}). Make sure template.txt is served next to index.html.`);
+    return;
+  }
+
+  const templateText = await res.text();
+  triggerTextDownload(finalName, templateText);
+}
+
 
 // ---------- Parse notes into sections ----------
 function parseNoteToBlocks(text, filename){
@@ -299,6 +350,12 @@ function wireEvents(){
       if(g) renderActiveNoteWithHighlight(g); else { const note = notes.find(n=>n.id===activeNoteId); if(note) { els.noteContent.innerHTML = renderBlocksToHtml(note.blocks); document.querySelectorAll(".section.highlight").forEach(s=>s.classList.remove("highlight")); } }
     }
   });
+    if (els.newLogBtn) {
+    els.newLogBtn.addEventListener("click", () => {
+      downloadNewLogFromTemplate();
+    });
+  }
+
   els.tabNotes.addEventListener("click", ()=> showView("notes"));
   els.tabGenerators.addEventListener("click", ()=> { buildGeneratorsAndPowerCycles(); renderGeneratorsView(); showView("generators"); });
   document.addEventListener("keydown",(e)=>{ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="k"){ e.preventDefault(); els.globalSearch.focus(); } if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==="f"){ if(!els.inNoteSearch.disabled){ e.preventDefault(); els.inNoteSearch.focus(); } } });
